@@ -1,0 +1,14 @@
+# Binary
+*.o
+sole
+
+# Building system
+make/*.mk
+make/Objects.m4
+
+# Dev
+dev/
+*.log
+*.task
+TAGS
+tags

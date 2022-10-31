@@ -4,13 +4,22 @@ Patience-like card game for the CLI written in C.
 
 ## Building
 
-Run `make sole` to build the program. `make` variables are:
+Run `./configure` then `make sole` to build the program. `make`
+variables are:
 
 - `CC` : the C compiler (cc)
-- `CFLAGS` : flags to pass to the compiler ()
+- `CFLAGS` : flags to pass to the compiler (-Wall)
 - `CFLAGSADD` : additional flags to pass to the compiler ()
 
-No further dependencies are needed besides `libc`.
+`./configure` flags are the same as `make` variables but in
+**lowercase** (for example `./configure --cc=clang`) plus the
+following include flags:
+
+- `[-/+]animation` : ommit/permit displaying ending animation (permit)
+
+No further dependencies are needed besides `libc`. This project uses
+the `./configure` building system from
+[cproj](https://github.com/matthmr/cproj).
 
 ## Playing
 
@@ -55,30 +64,42 @@ of the finishing space at any moment.
 
 ### Interface
 
-Press `TAB` to cycle between sections. Each section defines a *mode of
-operation* that changes the keybindings so that we can reuse them.
+Here are the default keybindings broken down by category:
 
-Here are the keybindings *per mode*:
+#### Movement
 
-- **stacking**:
-  - `ENTER`: mark card as active<*>
-  - `SPACE`: take another cards
-- **playing**:
-  - `ENTER`: mark card/(sub)stack as active<*>
-  - `h`: go left
-  - `j`: go down
-  - `k`: go up
-  - `l`: go right
-  - `s`: send bottom card to the finishing section
-  - `SPACE`: send as many cards as possible to the finishing section
-- **finishing**:
-  - `ENTER`: mark card as active<*>
+- `h`: go left
+- `j`: go down
+- `k`: go up
+- `l`: go right
 
-<*> an active stack/card is marked as movable, any other mark
-    operation tries to join the stack/card with the stack under the
-    cursor. The `c` key cancels the mark.
+#### Mark
 
-Invalid plays will **not** cancel the marking.
+- `m`: mark the current visible stack card
+- `RET`: mark card
+- `c`: cancel mark
+
+#### Play
+
+- `a`: send all possible cards to the finishing stack maintaining
+       the mark as intact as possible
+- `b`: play the bottom card of the current stack into the finishing
+       stack (keeps mark, if possible)
+- `s`: send the visible stack card into the finishing stack
+- `p`: act on mark (send marked stack to current position, if possible)
+
+#### Fields
+
+- `TAB`: cycle fields
+- `q`: go to the previous field, preserving the previous cursor
+       position (keeps mark, if possible)
+- `t`: go to the passive mark
+
+#### Misc
+
+- `SPC`: take a card from the stack
+
+Invalid plays (acts) will **not** cancel the mark.
 
 ## License
 
