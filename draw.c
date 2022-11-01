@@ -7,54 +7,50 @@
 #include "draw.h"
 #include "cli.h"
 
+#define HEADER_INIT_MAGIC (18)
+#define HEADER_ALIGN_MAGIC (11)
+#define HEADER_PAD_MAGIC (3)
+#define HEADER_CURSOR_PAD_MAGIC (2)
+
 typedef struct termios Termios;
 
 /*
    draw stack:
 
-             (draw_header_finishing)       <<<
-    (draw_header_stacking) |||||||||       <<<
-    |||||||||   ||||||||||||||||||||       <<<
-    vvvvvvvvv   vvvvvvvvvvvvvvvvvvvv       <<<
-    24 [10 ♥]   [4  ♥] [Q  ♦] [2  ♣]  **   <<< (draw_header)
-                                           <<<
-    --2---  **  [  ] [  ] [  ] [  ] [  ]   <<< (draw_playing_header)
-   >[    ]<                                <<<
-   ~[   ]~                                 <<< (draw_playing)
-    <error>                                <<< (draw_error)
+     - 20 -                    - ♠ --   - ♥ --   - ♦ --   - ♣ -- <<<
+     [10 ♥]                    [4  ♥]   [Q  ♦]   [2  ♣]     **   <<<
+                                                                 <<< (draw_header)
+     - 2 --   > ** <  [    ]   [    ]   [    ]   [    ]   [    ] <<<
+    ~[    ]~                                                     <<<
+    ~[    ]~                                                     <<<
+                                                                 <<< (draw_playing)
+    <error>                                                      <<< (draw_error)
  */
 
 Display display = {0};
 Termios oset, nset;
 
-typedef struct {
-  bool play[FIELDS];
-  bool fini[SUITS_PER_DECK];
-} HeaderMask;
-
-static HeaderMask mask = {0};
-
 static const schar numpm[] = {
-	[_A]  = "A  ",
-	[_2]  = "2  ",
-	[_3]  = "3  ",
-	[_4]  = "4  ",
-	[_5]  = "5  ",
-	[_6]  = "6  ",
-	[_7]  = "7  ",
-	[_8]  = "8  ",
-	[_9]  = "9  ",
-	[_10] = "10 ",
-	[_K]  = "K  ",
-	[_Q]  = "Q  ",
-	[_J]  = "J  ",
+  [_A]  = "A  ",
+  [_2]  = "2  ",
+  [_3]  = "3  ",
+  [_4]  = "4  ",
+  [_5]  = "5  ",
+  [_6]  = "6  ",
+  [_7]  = "7  ",
+  [_8]  = "8  ",
+  [_9]  = "9  ",
+  [_10] = "10 ",
+  [_K]  = "K  ",
+  [_Q]  = "Q  ",
+  [_J]  = "J  ",
 };
 
 static const wchar suitpm[] = {
-	[SUIT(DIAMONDS)] = "♦",
-	[SUIT(CLUBS)]    = "♣",
-	[SUIT(HEARTS)]   = "♥",
-	[SUIT(SPADES)]   = "♠",
+  [SUIT(DIAMONDS)] = "♦",
+  [SUIT(CLUBS)]    = "♣",
+  [SUIT(HEARTS)]   = "♥",
+  [SUIT(SPADES)]   = "♠",
 };
 
 static const char* errmsg[] = {
@@ -100,7 +96,7 @@ static const Cur markcur = {
   .right = STYLE("91;1", "<"),
 };
 
-static void termset(void) {
+static inline void termset(void) {
   tcgetattr(0, &oset);
   nset = oset;
   nset.c_lflag &= (~ICANON & ~ECHO);
@@ -108,7 +104,7 @@ static void termset(void) {
   write(1, "\033[?25l", 6);
 }
 
-static void termrest(void) {
+static inline void termrest(void) {
   tcsetattr(0, TCSANOW, &oset);
   write(1, "\033[?25h", 6);
 }
@@ -128,13 +124,13 @@ static char* draw_card(char* buf, Card* card) {
     buf = draw(buf, __RESET__ "]");
   }
   else {
-    buf = draw(buf, " ** ");
+    buf = draw(buf, "  **  ");
   }
 
   return buf;
 }
 
-static char* draw_card_cur(char* buf, Card* card, enum cur_t cur) {
+static inline char* draw_card_cur(char* buf, Card* card, enum cur_t cur) {
   buf = draw(buf, (char*) selcur[cur].left);
   buf = draw_card(buf, card);
   buf = draw(buf, (char*) selcur[cur].right);
@@ -142,128 +138,202 @@ static char* draw_card_cur(char* buf, Card* card, enum cur_t cur) {
   return buf;
 }
 
-struct align_t {
-  uint stack;
-  uint fini;
-};
+static inline char* draw_header_suit(char* buf, Suit suit) {
+  // NOTE: this is the *only one* to have an extra space because
+  //       this is only called once
+  buf = draw(buf, "- ");
+  buf = draw(buf, card_color(suit));
+  buf = draw(buf, (char*) suitpm[SUIT(suit)]);
+  buf = draw(buf, __RESET__ " --");
 
-static struct align_t aligncomp(Player* p, HeaderMask mask) {
-  struct align_t ret = {.stack = 0, .fini = 0};
-  uint ph = 0;
-
-  for (uint i = 0; i < FIELDS; i++) {
-    if (pfield[i].am) {
-      ph++;
-    }
-  }
-
-  ret.fini = ph;
-
-  return ret;
+  return buf;
 }
 
-// -- draw stack top -- //
-static char* draw_header_stacking(char* buf, Player* p, uint align) {
-  uint am = sfield.am;
+static inline char* draw_header_num(char* buf, uint num) {
+  buf = draw(buf, "- ");
+  char* _buf = buf;
+  buf = draw_num(buf, num);
+  buf = draw(buf, ((buf - _buf == 1)? " --": " -"));
+
+  return buf;
+}
+
+static inline char* draw_header_top_stacking(char* buf) {
+  buf = drawn(buf, ' ', HEADER_INIT_MAGIC);
+
+  Suit order[] = {SPADES, HEARTS, CLUBS, DIAMONDS};
+
+  for (uint i = 0; i < (sizeof(order)/sizeof(*order)); i++) {
+    buf = drawn(buf, ' ', HEADER_PAD_MAGIC);
+    buf = draw_header_suit(buf, order[i]);
+  }
+
+  buf = drawn(buf, '\n', 1);
+
+  return buf;
+}
+
+// -- BEGIN: draw stack -- //
+static char* draw_header_top(char* buf) {
+  buf = drawn(buf, ' ', HEADER_PAD_MAGIC);
+
+  buf = draw_header_num(buf, sfield.off);
+  buf = draw_header_top_stacking(buf);
+
+  return buf;
+}
+
+static char* draw_header_stacking(char* buf, Player* p) {
+
+  /*
+    NOTE: here, `off' means the cards *over* the stack
+          and `am` means all the stack cards at once
+   */
   uint off = sfield.off;
+  uint am = sfield.am;
+
   Card* top = sfield.stack;
+  uint align = HEADER_ALIGN_MAGIC;
+
+  enum cur_t cur;
+
+#define SET_CURSOR_STACKING(a,b,c)              \
+  (a.b) == STACKING && (cur = (c), true)
+
+  bool is_cursor_here = (
+    (SET_CURSOR_STACKING(p->curr, field, ACT_CARD))
+    || (SET_CURSOR_STACKING(p->event, cmd & MARK, PAS_CARD)));
+
+  // wait for the cursor state before drawing the next one
+  buf = drawn(buf, ' ', (HEADER_PAD_MAGIC-1));
 
   if (am) {
-    if (p->curr.field == STACKING) {
-      buf = draw_num(buf, off);
-      buf = draw_card_cur(buf, top + off, ACT_CARD);
-    }
-    else if (off) {
-      buf = draw_num(buf, off);
-      buf = drawn(buf, ' ', 2);
+    if (is_cursor_here) {
+      buf = draw_card_cur(buf, (top + off), cur);
+      align--;
+      goto done;
     }
     else {
-      buf = draw(buf, " ** ");
-      buf = drawn(buf, ' ', 4);
+      buf = drawn(buf, ' ', 1);
     }
+
+    if (off) {
+      buf = draw_card(buf, (top + off));
+    }
+    else {
+      buf = draw(buf, "  **  ");
+    }
+
+    buf = drawn(buf, ' ', align);
   }
   else {
-    buf = draw(buf, " ** ");
-    buf = drawn(buf, ' ', 5);
+    buf = draw(buf, "  **  ");
   }
 
-  if (off) {
-    buf = draw_card(buf, top + off);
-  }
-  else {
-    buf = draw(buf, " ** ");
-  }
-
+done:
+  // trailing space before the finishing field
   buf = drawn(buf, ' ', align);
 
   return buf;
 }
-static char* draw_header_finishing(char* buf, Player* p, uint align) {
-  uint mark = -1u;
-  uint i = 0;
+static char* draw_header_finishing(char* buf, Player* p) {
+  enum cur_t cur;
+  uint here;
 
-  if (p->curr.field == FINISHING) {
-    // we preemptively write a space from our sibbling
-    mark = p->curr.pos.x;
-    buf--;
-  }
+#define SET_CURSOR_FINISHING(a,b,c,d)                   \
+  (a.b) == FINISHING && (cur = (d), here = (a.c), true)
 
-  i++;
+  // dirty C hack, may not work on compilers that don't short circuit booleans
+  // also, the macro looks dirty but it *should* work on your preprocessor
+  bool is_cursor_here = (
+    (SET_CURSOR_FINISHING(p->curr, field, pos.x, ACT_CARD))
+    || (SET_CURSOR_FINISHING(p->event, cmd & MARK, from.pos.x, PAS_CARD)));
 
-  for (; i < SUITS_PER_DECK; i++) {
-    if (i == mark) {
-      buf = draw_card_cur(buf, (ffield[i].stack + ffield[i].off), ACT_CARD);
-      mark++;
+  for (uint i = 0; i < SUITS_PER_DECK; i++) {
+    DeckField ff = ffield[i];
+
+    if (is_cursor_here) {
+      // wait for the cursor state
+      if (here == i) {
+        buf = draw_card_cur(buf, (ff.stack + ff.off), cur);
+        goto _draw_pad;
+      }
+      else {
+        goto _draw_card;
+      }
     }
     else {
-      // don't draw over the right border of a mark
-      if (i != mark) {
-        buf = drawn(buf, ' ', 1);
+_draw_card:
+      if (ff.am) {
+        buf = draw_card(buf, (ff.stack + ff.off));
       }
-      buf = draw_card(buf, (ffield[i].stack + ffield[i].off));
+      else {
+        buf = draw(buf, "  **  ");
+      }
     }
+_draw_pad:
+    buf = drawn(buf, ' ', HEADER_PAD_MAGIC);
   }
 
   return buf;
 }
 
 static char* draw_header(char* buf, Player* p) {
-  struct align_t align = aligncomp(p, mask);
-
-  buf = draw_header_stacking(buf, p, align.stack);
-  buf = draw_header_finishing(buf, p, align.fini);
+  buf = draw_header_top(buf);
+  buf = draw_header_stacking(buf, p);
+  buf = draw_header_finishing(buf, p);
   buf = drawn(buf, '\n', 2);
 
   return buf;
 }
 
 static char* draw_playing_header(char* buf, Player* p) {
-  buf = drawn(buf, ' ', 1);
+  enum cur_t cur;
+  uint here;
+
+#define SET_CURSOR_PLAYING(a,b,c,d)                     \
+  (a.b) == PLAYING && (cur = (d), here = (a.c), true)
+
+  bool is_cursor_here = (
+    (SET_CURSOR_PLAYING(p->curr, field, pos.x, ACT_CARD))
+    || (SET_CURSOR_PLAYING(p->event, cmd & MARK, from.pos.x, PAS_CARD)));
 
   for (uint i = 0; i < FIELDS; i++) {
     uint off = pfield[i].off;
 
-    if (i) {
-      buf = drawn(buf, ' ', 1);
+    if (off) {
+      if (is_cursor_here && (here == i || (here + 1) == i)) {
+        buf = drawn(buf, ' ', HEADER_CURSOR_PAD_MAGIC);
+      }
+      else {
+        buf = drawn(buf, ' ', HEADER_PAD_MAGIC);
+      }
+
+      buf = draw_header_num(buf, off);
+
+      continue;
     }
 
-    // there are no hidden cards: draw the top card from
-    // the playing field
-    if (!off) {
-      buf = draw_card(buf, (pfield[i].stack + pfield[i].off));
+    else if (is_cursor_here) {
+      if (here == i) {
+        buf = drawn(buf, ' ', HEADER_CURSOR_PAD_MAGIC);
+        buf = draw_card_cur(buf, (pfield[i].stack + pfield[i].off), cur);
+        continue;
+      }
+      else if ((here + 1) == i) {
+        buf = drawn(buf, ' ',  HEADER_CURSOR_PAD_MAGIC);
+      }
+      else {
+        buf = drawn(buf, ' ', HEADER_PAD_MAGIC);
+      }
     }
     else {
-      /*
-        NOTE: this field can only decrease and the default
-              is *single digited*
-       */
-      buf = draw(buf, " --");
-      buf = draw_num(buf, off);
-      buf = draw(buf, "---");
+      buf = drawn(buf, ' ', HEADER_PAD_MAGIC);
     }
+
+    buf = draw_card(buf, (pfield[i].stack + pfield[i].off));
   }
 
-  buf = drawn(buf, ' ', 1);
   buf = drawn(buf, '\n', 1);
 
   return buf;
@@ -284,7 +354,7 @@ static char* draw_playing(char* buf, Player* p) {
 
   return buf;
 }
-// -- draw stack bottom -- //
+// -- END: draw stack -- //
 
 static void display_compsize(Display* dpy, DeckField* pf) {
   uint ret = 0;
@@ -386,8 +456,6 @@ static char* put_cursor(char* buf, Player* p) {
 static void draw_stack(Player* p) {
   char* buf = display.buf;
 
-  //struct align_t align = draw_update_event(p->event);
-
   buf = set_new_frame(buf);
 
   // -- draw stack top -- //
@@ -405,21 +473,43 @@ static void draw_stack(Player* p) {
   exit(0);
 #  endif
 #endif
+
 }
 
 static void draw_stack_init(Player* p) {
-  // static alloc, later alloc's will be more dynamic than this
-  display.bufs += NUMSIZE + 1 + CARDSIZE;      // 24 [10 ♥]
-  // TODO: this is not 5, it should be dynamic
-  //display.bufs += 5;
-  display.bufs += SUITS_PER_DECK*(CARDSIZE+1); // [4 ♥] [Q ♦] [2 ♣]  **
-  display.bufs += 1;
-  display.bufs += 1+7*(CARDSIZE+1)+1;          // -2--  **  [  ] [  ]
-  display.bufs += 2*(ESCSIZE+1)+1;             // > ... < (anata... baka!)
-  display.bufs += ERRMSGLEN+1;                 // <error>
+  char* buf = NULL;
+  uint bufs = 0;
 
-  display.buf = malloc(display.bufs*sizeof(*display.buf));
+  // -- BEGIN: init display -- //
+  // static alloc, later alloc's will be more dynamic than this
+  bufs += 0;
+  bufs += NUMSIZE + 1 + CARDSIZE;      // 24 [10 ♥]
+  bufs += SUITS_PER_DECK*(CARDSIZE+1); // [4 ♥] [Q ♦] [2 ♣]  **
+  bufs += 1;
+  bufs += 1+FIELDS*(CARDSIZE+1)+1;     // -2--  **  [  ] [  ]
+  bufs += 2*(ESCSIZE+1)+1;             // > ... < (anata... baka!)
+  bufs += ERRMSGLEN+1;                 // <error>
+  display.bufs = bufs;
+
+#if DEBUG == 1
+  buf = malloc(1024*sizeof(*display.buf));
+#else
+  buf = malloc(display.bufs*sizeof(*display.buf));
+#endif
+
+  display.buf = buf;
+  // -- END: init display -- //
+
   draw_stack(p);
+  render(display, buf);
+
+#if DEBUG == 1
+#  ifdef DEBUG_DRAW_STACK_INIT
+  termrest();
+  exit(0);
+#  endif
+#endif
+
 }
 
 void displayinit(void) {
@@ -428,6 +518,7 @@ void displayinit(void) {
   // NOTE: this is the same as in `gameinit'
   Player vp;
 
+  vp.event.cmd = 0;
   vp.curr = (PlayerPos) {
     .field = PLAYING,
     .pos = {

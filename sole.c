@@ -46,6 +46,26 @@ static inline void clear(void) {
   displayclear();
 }
 
+static Pos pos_justify(Pos cpp, Field cpf) {
+  Pos jpp = cpp;
+
+  // there's no reason to justify any field other
+  // than the playing one
+  if (cpf == PLAYING) {
+    if (pfield[cpp.x].am) {
+      uint max_y = (pfield[cpp.x].am - pfield[cpp.x].off);
+      if (max_y < cpp.y) {
+        jpp.y = max_y;
+      }
+    }
+    else {
+      jpp.y = 0;
+    }
+  }
+
+  return jpp;
+}
+
 static void mov(Player* p, CmdMov mov) {
   Pos pp = p->curr.pos;
   Field pf = p->curr.field;
@@ -114,7 +134,8 @@ static void mov(Player* p, CmdMov mov) {
     pp.y = max.y;
   }
 
-  p->curr.pos = pp;
+  p->event.cmd |= MOV;
+  p->curr.pos = pos_justify(pp, pf);
 }
 
 static int gameupdate(Cmd* cmd) {

@@ -50,7 +50,10 @@ struct fnum_t {
   uint zero;
 };
 
-static struct fnum_t fnum = {.mod = SOLE_FIELDS, .zero = 0};
+static struct fnum_t fnum = {
+  .mod = SOLE_FIELDS,
+  .zero = 0
+};
 
 static void swap(uint i) {
   uint swp = seeded(DECKN);

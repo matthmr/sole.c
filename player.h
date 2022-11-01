@@ -34,7 +34,7 @@ typedef struct {
 } Pos;
 
 typedef enum {
-  STACKING = 0,
+  STACKING = 1,
   PLAYING,
   FINISHING,
 } Field;
@@ -75,7 +75,7 @@ typedef struct {
 } Player;
 
 typedef enum {
-  COK,
+  COK = 0,
   CEXIT,
 } CmdStat;
 
