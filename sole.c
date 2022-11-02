@@ -11,6 +11,8 @@
 #  include "opt/anim.h"
 #endif
 
+#define HEADER_MAGIC_SHUFFLE (5)
+
 static Cmd cmd;
 
 static void gameinit(Cmd* cmd) {
@@ -25,6 +27,13 @@ static void gameinit(Cmd* cmd) {
       .y = 0,
     },
   };
+  vp.prev = (PlayerPos) {
+    .field = 0, // so that `ENFIELD' can trigger
+    .pos = {
+      .x = 0,
+      .y = 0,
+    },
+  };
 
   cmd->stat = COK;
   cmd->p = vp;
@@ -33,7 +42,10 @@ static void gameinit(Cmd* cmd) {
   seed = *(uint*) &vp;
   seed = (seeded(t) << 4) ^ t;
 
-  cardsshuffle();
+  for (uint i = 0; i < HEADER_MAGIC_SHUFFLE; i++) {
+    cardsshuffle();
+  }
+
   fieldspop();
 }
 
@@ -46,23 +58,41 @@ static inline void clear(void) {
   displayclear();
 }
 
+static void cmdupdate(Cmd* cmd) {
+  bool did_win = false;
+
+  // if there are no cards in the stacking or playing fields,
+  // the game is over
+  did_win |= sfield.am;
+  for (uint i = 0; i < ARRLEN(pfield); i++) {
+    did_win |= pfield[i].am;
+  }
+  
+  if (did_win) {
+    cmd->stat = CWIN;
+  }
+}
+
 static Pos pos_justify(Pos cpp, Field cpf) {
   Pos jpp = cpp;
 
   // there's no reason to justify any field other
   // than the playing one
-  if (cpf == PLAYING) {
-    if (pfield[cpp.x].am) {
-      uint max_y = (pfield[cpp.x].am - pfield[cpp.x].off);
-      if (max_y < cpp.y) {
-        jpp.y = max_y;
-      }
-    }
-    else {
-      jpp.y = 0;
-    }
+  if (cpf != PLAYING) {
+    goto done;
   }
 
+  if (pfield[cpp.x].am) {
+    uint max_y = (pfield[cpp.x].am - pfield[cpp.x].off);
+    if (max_y < cpp.y) {
+      jpp.y = max_y;
+    }
+  }
+  else {
+    jpp.y = 0;
+  }
+
+done:
   return jpp;
 }
 
@@ -145,15 +175,17 @@ static int gameupdate(Cmd* cmd) {
   char c;
   Player* p = &cmd->p;
 
+  // because of `termset', this function ouputs the first character
+  // it sees in the input buffer
   c = getchar();
 
   if (c == EOF) {
     cmd->stat = CEXIT;
-    return GEND;
   }
 
-  if (cmd->stat == CEXIT || c == 'q') {
-    return GEND;
+  if (cmd->stat == CEXIT || c == KEY_QUIT) {
+    ret = GEND;
+    goto done;
   }
 
   /*
@@ -195,15 +227,23 @@ static int gameupdate(Cmd* cmd) {
 // -- BEGIN: play-like commands  -- //
   case KEY_PLAY:
     MAYBE(play(p));
+    cmdupdate(cmd);
     break;
   case KEY_PLAYBOTTOM:
     MAYBE(playbottom(p));
+    cmdupdate(cmd);
     break;
   case KEY_PLAYALL:
     MAYBE(playall(p));
+    cmdupdate(cmd);
     break;
-  case KEY_PLAYSTACK:
-    MAYBE(playstack(p));
+  case KEY_PLAYSTACKCUR:
+    MAYBE(playstackcur(p));
+    cmdupdate(cmd); 
+    break;
+  case KEY_PLAYSTACKFIN:
+    MAYBE(playstackfin(p));
+    cmdupdate(cmd);
     break;
 // -- END: play-like commands  -- //
 
@@ -226,6 +266,11 @@ static int gameupdate(Cmd* cmd) {
 // -- END: mic commands -- //
   }
 
+  if (cmd->stat == CWIN) {
+    ret = GEND;
+  }
+
+done:
   return ret;
 }
 
@@ -238,7 +283,9 @@ static int gameloop(void) {
     int gstat = gameupdate(&cmd);
     if (gstat == GEND) {
 #if ANIMATION == 1
-      endanimation();
+      if (cmd.stat == CWIN) {
+        endanimation();
+      }
 #endif
       break;
     }

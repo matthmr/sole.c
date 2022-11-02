@@ -9,7 +9,6 @@ INCLUDE_FLAGS=('ANIMATION' 'DEBUG')
 INCLUDE_FLAG_PREFIX='M4FLAG_include_'
 
 CALLEES=(
-	"inline"
 	"make-flags"
 	"make-deps"
 #	"make-makefile"

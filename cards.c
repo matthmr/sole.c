@@ -103,12 +103,6 @@ static void finishingpop(void) {
 static void movupdate(Player* p) {
 }
 
-// TODO:
-static Card* fsuit(Suit suit) {
-  Card* ret = NULL;
-  return ret;
-}
-
 static Card* cardonpos(Pos pp, Field pf) {
   Card* ret = NULL;
 
@@ -187,19 +181,34 @@ void chfield(Player *p) {
 
 int play(Player* p) {
   int ret = 0;
-  PlayerPos curr = p->curr;
 
-  // can't play a card into the stack
-  if (curr.field == STACKING) {
-    ret = -EILLEGAL;
+  Event pe = p->event;
+
+  PlayerPos actpos = pe.to;
+  PlayerPos paspos;
+
+  if ((pe.cmd & KEEP)) {
+    paspos = pe.from;
+  }
+  else {
+    paspos = p->curr;
   }
 
-  Card* act = cardonpos(curr.pos, curr.field);
-  Card* pas = cardonpos(curr.pos, curr.field);
+  // can't play a card into the stack
+  if (actpos.field == STACKING) {
+    ret = -EILLEGAL;
+    goto done;
+  }
 
-  if (islegal(act, pas, curr.field)) {
-    p->event.cmd &= ~MARK;
-    p->event.cmd |= PLAY;
+  Card* act = cardonpos(actpos.pos, actpos.field);
+  Card* pas = cardonpos(paspos.pos, paspos.field);
+
+  if (islegal(act, pas, actpos.field)) {
+    if (!(pe.cmd & KEEP)) {
+      pe.cmd &= ~MARK;
+    }
+    pe.cmd |= PLAY;
+    p->event = pe;
 
     movupdate(p);
   }
@@ -207,6 +216,7 @@ int play(Player* p) {
     ret = -EILLEGAL;
   }
 
+done:
   return ret;
 }
 
@@ -249,17 +259,108 @@ void drop(Player* p) {
 
 int markstack(Player* p) {
   int ret = 0;
+  Player vp = *p;
 
   if (!sfield.am) {
     ret = -ESTKNCARD;
   }
   else {
-    mark(p);
+    vp.event.cmd |= MARK;
+    vp.event.from = (PlayerPos) {
+      .pos = {
+        .x = 0,
+        .y = 0,
+      },
+      .field = STACKING,
+    };
+
+    mark(&vp);
+    *p = vp;
   }
 
   return ret;
 }
 
-int playstack(Player *p) { int ret = 0; return ret; }
-int prevfield(Player *p) { int ret = 0; return ret; }
-int prevmark(Player *p)  { int ret = 0; return ret; }
+int prevfield(Player *p) {
+  int ret = 0;
+
+  if (!p->prev.field) {
+    ret = -ENFIELD;
+  }
+  else {
+    PlayerPos tmp = p->curr;
+    p->curr = p->prev;
+    p->prev = tmp;
+  }
+
+  return ret;
+}
+
+int prevmark(Player *p)  {
+  int ret = 0;
+
+  if (!(p->event.cmd & MARK)) {
+    ret = -ENMARK;
+  }
+  else {
+    p->curr = p->event.from;
+  }
+
+  return ret;
+}
+
+int playstackfin(Player *p)  {
+  int ret = 0;
+  Player vp = *p;
+
+  if (!sfield.am) {
+    ret = -ESTKNCARD;
+  }
+  else {
+    vp.event.cmd |= (MARK | KEEP);
+    vp.event.from = (PlayerPos) {
+      .pos = {
+        .x = 0,
+        .y = 0,
+      },
+      .field = STACKING,
+    };
+    vp.event.to = (PlayerPos) {
+      .pos = {
+        .x = (sfield.stack + sfield.off)->suit,
+        .y = 0,
+      },
+      .field = FINISHING,
+    };
+    
+    ret = play(&vp);
+    *p = vp;
+  }
+  
+  return ret;
+}
+
+int playstackcur(Player *p) {
+  int ret = 0;
+  Player vp = *p;
+
+  if (!sfield.am) {
+    ret = -ESTKNCARD;
+  }
+  else {
+    vp.event.cmd |= (MARK | KEEP);
+    vp.event.from = (PlayerPos) {
+      .pos = {
+        .x = 0,
+        .y = 0,
+      },
+      .field = STACKING,
+    };
+    vp.event.to = vp.curr;
+
+    ret = play(&vp);
+    *p = vp;
+  }
+  
+  return ret;
+}

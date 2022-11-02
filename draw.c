@@ -8,9 +8,10 @@
 #include "cli.h"
 
 #define HEADER_INIT_MAGIC (18)
-#define HEADER_ALIGN_MAGIC (11)
+#define HEADER_ALIGN_MAGIC (21)
 #define HEADER_PAD_MAGIC (3)
 #define HEADER_CURSOR_PAD_MAGIC (2)
+#define HEADER_CARD_MAGIC (7)
 
 typedef struct termios Termios;
 
@@ -47,24 +48,34 @@ static const schar numpm[] = {
 };
 
 static const wchar suitpm[] = {
-  [SUIT(DIAMONDS)] = "♦",
-  [SUIT(CLUBS)]    = "♣",
-  [SUIT(HEARTS)]   = "♥",
-  [SUIT(SPADES)]   = "♠",
+  [DIAMONDS] = "♦",
+  [CLUBS]    = "♣",
+  [HEARTS]   = "♥",
+  [SPADES]   = "♠",
 };
 
-static const char* errmsg[] = {
-  [IND(EILLEGAL)]  = "Illegal play",
-  [IND(EBOTNFIN)]  = "Bottom card is not finishable",
-  [IND(EBOTNCARD)] = "No cards in this column",
-  [IND(EALLNFIN)]  = "No legal finishable play",
-  [IND(ESTKNCARD)] = "No cards in the stack",
+// get the compiler to spill the deeds using `sizeof'
+typedef struct {
+  const char* string;
+  const uint size;
+} String;
+
+static const String errmsg[] = {
+  [IND(EILLEGAL)]  = {MSG("Illegal play")},
+  [IND(EBOTNFIN)]  = {MSG("Bottom card is not finishable")},
+  [IND(EBOTNCARD)] = {MSG("No cards in this column")},
+  [IND(EALLNFIN)]  = {MSG("No legal finishable play")},
+  [IND(ESTKNCARD)] = {MSG("No cards in the stack")},
+  [IND(ENMARK)]    = {MSG("Mark is not set")},
+  [IND(ENFIELD)]   = {MSG("No previous field")},
 };
 
-static bool preverr = false;
+static bool err = false;
 
 enum cur_t {
-  ACT_CARD,
+  NO_CUR = -1,
+
+  ACT_CARD = 0,
   ACT_STACK,
 
   PAS_CARD,
@@ -120,7 +131,7 @@ static char* draw_card(char* buf, Card* card) {
     buf = drawn(buf, '[', 1);
     buf = draw(buf, card_color(card->suit));
     buf = draw(buf, (char*) numpm[card->number]);
-    buf = draw(buf, (char*) suitpm[SUIT(card->suit)]);
+    buf = draw(buf, (char*) suitpm[card->suit]);
     buf = draw(buf, __RESET__ "]");
   }
   else {
@@ -143,7 +154,7 @@ static inline char* draw_header_suit(char* buf, Suit suit) {
   //       this is only called once
   buf = draw(buf, "- ");
   buf = draw(buf, card_color(suit));
-  buf = draw(buf, (char*) suitpm[SUIT(suit)]);
+  buf = draw(buf, (char*) suitpm[suit]);
   buf = draw(buf, __RESET__ " --");
 
   return buf;
@@ -163,12 +174,36 @@ static inline char* draw_header_top_stacking(char* buf) {
 
   Suit order[] = {SPADES, HEARTS, CLUBS, DIAMONDS};
 
-  for (uint i = 0; i < (sizeof(order)/sizeof(*order)); i++) {
+  for (uint i = 0; i < ARRLEN(order); i++) {
     buf = drawn(buf, ' ', HEADER_PAD_MAGIC);
     buf = draw_header_suit(buf, order[i]);
   }
 
   buf = drawn(buf, '\n', 1);
+
+  return buf;
+}
+
+static char* draw_cursor_cur(char* buf, enum cur_t cur) {
+  if (cur == NO_CUR) {
+  }
+  else {
+  }
+
+  return buf;
+}
+
+static char* draw_cursor_forward_by_card(char* buf) {
+  // TODO: stub
+  return buf;
+}
+
+static inline char* draw_cursor_change(char* buf, enum cur_t cur, uint am) {
+  for (uint i = 0; i < am; i++) {
+    buf = draw_cursor_cur(buf, cur);
+    buf = draw_cursor_forward_by_card(buf);
+    buf = draw_cursor_cur(buf, cur);
+  }
 
   return buf;
 }
@@ -204,18 +239,16 @@ static char* draw_header_stacking(char* buf, Player* p) {
     (SET_CURSOR_STACKING(p->curr, field, ACT_CARD))
     || (SET_CURSOR_STACKING(p->event, cmd & MARK, PAS_CARD)));
 
-  // wait for the cursor state before drawing the next one
-  buf = drawn(buf, ' ', (HEADER_PAD_MAGIC-1));
 
   if (am) {
     if (is_cursor_here) {
+      buf = drawn(buf, ' ', HEADER_CURSOR_PAD_MAGIC);
       buf = draw_card_cur(buf, (top + off), cur);
       align--;
       goto done;
     }
-    else {
-      buf = drawn(buf, ' ', 1);
-    }
+
+    buf = drawn(buf, ' ', HEADER_PAD_MAGIC);
 
     if (off) {
       buf = draw_card(buf, (top + off));
@@ -223,8 +256,6 @@ static char* draw_header_stacking(char* buf, Player* p) {
     else {
       buf = draw(buf, "  **  ");
     }
-
-    buf = drawn(buf, ' ', align);
   }
   else {
     buf = draw(buf, "  **  ");
@@ -291,12 +322,12 @@ static char* draw_playing_header(char* buf, Player* p) {
   enum cur_t cur;
   uint here;
 
-#define SET_CURSOR_PLAYING(a,b,c,d)                     \
+#define SET_CURSOR_PLAYING_HEADER(a,b,c,d)                     \
   (a.b) == PLAYING && (cur = (d), here = (a.c), true)
 
   bool is_cursor_here = (
-    (SET_CURSOR_PLAYING(p->curr, field, pos.x, ACT_CARD))
-    || (SET_CURSOR_PLAYING(p->event, cmd & MARK, from.pos.x, PAS_CARD)));
+    (SET_CURSOR_PLAYING_HEADER(p->curr, field, pos.x, ACT_CARD))
+    || (SET_CURSOR_PLAYING_HEADER(p->event, cmd & MARK, from.pos.x, PAS_CARD)));
 
   for (uint i = 0; i < FIELDS; i++) {
     uint off = pfield[i].off;
@@ -342,13 +373,49 @@ static char* draw_playing_header(char* buf, Player* p) {
 static char* draw_playing(char* buf, Player* p) {
   buf = draw_playing_header(buf, p);
 
+  enum cur_t cur;
+  Pos here;
+
+#define SET_CURSOR_PLAYING(a,b,c,d)             \
+  (a.b) == PLAYING && (cur = (d), here.x = (a.c.x), here.y = (a.c.y), true)
+
+  bool is_cursor_here = (
+    (SET_CURSOR_PLAYING(p->curr, field, pos, ACT_CARD))
+    || (SET_CURSOR_PLAYING(p->event, cmd & MARK, from.pos, PAS_CARD)));
+
   for (uint i = 0; i < FIELDS; i++) {
-    // we already drew you on `draw_playing_header'-time
-    if (pfield[i].am == 1) {
+    DeckField pf = pfield[i];
+
+    // we already drew you
+    if (pf.am == 1) {
+      buf = drawn(buf, ' ', HEADER_PAD_MAGIC + HEADER_CARD_MAGIC);
       continue;
     }
+
     else {
-      
+      uint max_y = (pf.am - pf.off) + 1;
+      for (uint j = 1; j < max_y; j++) {
+
+        if (here.x == i) {
+          buf = drawn(buf, ' ', HEADER_CURSOR_PAD_MAGIC);
+          if (here.y == j) {
+            buf = draw_card_cur(buf, (pf.stack + pf.off + j), cur);
+          }
+          else {
+            // NOTE: `+1' essentially gets the `_STACK' version of the cursor
+            buf = draw_card_cur(buf, (pf.stack + pf.off + j), (cur+1));
+          }
+          continue;
+        }
+        else if ((here.x+1) == i) {
+          buf = drawn(buf, ' ', HEADER_CURSOR_PAD_MAGIC);
+        }
+        else {
+          buf = drawn(buf, ' ', HEADER_PAD_MAGIC);
+        }
+
+        buf = draw_card(buf, (pf.stack + pf.off + j));
+      }
     }
   }
 
@@ -441,7 +508,7 @@ static void render(Display dpy, char* buf) {
   write(1, dpybuf, dpybufs);
 }
 
-static char* set_new_frame(char* buf) {
+static char* set_new_frame(char* buf, EventCmd eventcmd) {
   // TODO: clear the previous frame
 
   display_alloc(&display);
@@ -456,13 +523,14 @@ static char* put_cursor(char* buf, Player* p) {
 static void draw_stack(Player* p) {
   char* buf = display.buf;
 
-  buf = set_new_frame(buf);
+  buf = set_new_frame(buf, p->event.cmd);
 
-  // -- draw stack top -- //
+  // -- BEGIN: draw stack -- //
   buf = draw_header(buf, p);
   buf = draw_playing(buf, p);
-  // -- draw stack bottom -- //
+  // -- END: draw stack -- //
 
+  buf = drawn(buf, '\n', 2);
   buf = put_cursor(buf, p);
 
   render(display, buf);
@@ -480,6 +548,13 @@ static void draw_stack_init(Player* p) {
   char* buf = NULL;
   uint bufs = 0;
 
+  uint errmsglen = 0;
+
+  for (uint i = 0; i < ARRLEN(errmsg); i++) {
+    uint msglen = errmsg[i].size;
+    errmsglen = (msglen > errmsglen)? msglen: errmsglen;
+  }
+
   // -- BEGIN: init display -- //
   // static alloc, later alloc's will be more dynamic than this
   bufs += 0;
@@ -488,7 +563,7 @@ static void draw_stack_init(Player* p) {
   bufs += 1;
   bufs += 1+FIELDS*(CARDSIZE+1)+1;     // -2--  **  [  ] [  ]
   bufs += 2*(ESCSIZE+1)+1;             // > ... < (anata... baka!)
-  bufs += ERRMSGLEN+1;                 // <error>
+  bufs += 1+errmsglen+1;               // <error>
   display.bufs = bufs;
 
 #if DEBUG == 1
@@ -511,6 +586,13 @@ static void draw_stack_init(Player* p) {
 #endif
 
 }
+
+static void draw_error(char* msg, bool err) {
+}
+
+static void clear_error(void) {
+}
+
 
 void displayinit(void) {
   termset();
@@ -536,11 +618,18 @@ void displayclear(void) {
 }
 
 void displayupdate(Cmd* cmd) {
+  if (err) {
+    clear_error();
+    err ^= true;
+  }
+
   draw_stack(&cmd->p);
 }
 
 void displayerr(enum err ecode) {
   int code = -(int) ecode;
+  const char* msg = errmsg[HUM(code)].string;
+  draw_error(msg, err);
 
-  const char* msg = errmsg[HUM(code)];
+  err ^= true;
 }

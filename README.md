@@ -75,29 +75,32 @@ Here are the default keybindings broken down by category:
 
 #### Mark
 
+- `RET`: mark the card stack under the cursor
 - `m`: mark the current visible stack card
-- `RET`: mark card
 - `c`: cancel mark
 
 #### Play
 
-- `a`: send all possible cards to the finishing stack maintaining
-       the mark as intact as possible
+- `p`: act on mark (send marked stack to the position under the
+       cursor, if possible)
 - `b`: play the bottom card of the current stack into the finishing
        stack (keeps mark, if possible)
-- `s`: send the visible stack card into the finishing stack
-- `p`: act on mark (send marked stack to current position, if possible)
+- `a`: send all possible cards to the finishing stack maintaining
+       the mark as intact as possible
+- `s`: send the visible stack card into the card under the cursor
+- `e`: send the visible stack card into the finishing stack
 
 #### Fields
 
 - `TAB`: cycle fields
-- `q`: go to the previous field, preserving the previous cursor
+- `f`: go to the previous field, preserving the previous cursor
        position (keeps mark, if possible)
-- `t`: go to the passive mark
+- `r`: go to the passive mark
 
 #### Misc
 
 - `SPC`: take a card from the stack
+- `q`: quits the game at any moment
 
 Invalid plays (acts) will **not** cancel the mark.
 

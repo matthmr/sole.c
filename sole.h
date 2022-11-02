@@ -3,7 +3,7 @@
 
 #  include "player.h"
 
-#  define VERSION "v0.2.2"
+#  define VERSION "v0.2.3"
 #  define PROG "sole"
 
 #  define GEND (~0)
@@ -27,25 +27,40 @@ typedef enum {
         are not possible at the moment
  */
 enum keybindings {
-  KEY_MOVEDOWN    = 'j',
-  KEY_MOVEUP      = 'k',
-  KEY_MOVELEFT    = 'h',
-  KEY_MOVERIGHT   = 'l',
+  // -- BEGIN: mov-like -- //
+  KEY_MOVEDOWN     = 'j',
+  KEY_MOVEUP       = 'k',
+  KEY_MOVELEFT     = 'h',
+  KEY_MOVERIGHT    = 'l',
+  // -- END: mov-like -- //
 
-  KEY_MARK        = '\n',
-  KEY_MARKSTACK   = 'm',
-  KEY_DROP        = 'c',
+  // -- BEGIN: mark-like -- //
+  KEY_MARK         = '\n',
+  KEY_MARKSTACK    = 'm',
+  KEY_DROP         = 'c',
+  // -- END: mark-like -- //
 
-  KEY_PLAY        = 'p',
-  KEY_PLAYBOTTOM  = 'b',
-  KEY_PLAYALL     = 'a',
-  KEY_PLAYSTACK   = 's',
+  // -- BEGIN: play-like -- //
+  KEY_PLAY         = 'p',
+  KEY_PLAYBOTTOM   = 'b',
+  KEY_PLAYALL      = 'a',
+  KEY_PLAYSTACKCUR = 's',
+  KEY_PLAYSTACKFIN = 'e',
+  // -- END: play-like -- //
 
-  KEY_CHFIELD     = '\t',
-  KEY_PREVFIELD   = 'q',
-  KEY_PREVMARK    = 't',
+  // -- BEGIN: chfield-like -- //
+  KEY_CHFIELD      = '\t',
+  KEY_PREVFIELD    = 'f',
+  KEY_PREVMARK     = 'r',
+  // -- END: chfield-like -- //
 
-  KEY_TAKE        = ' ',
+  // -- BEGIN: take-like -- //
+  KEY_TAKE         = ' ',
+  // -- END: take-like -- //
+
+  // -- BEGIN: quit-like -- //
+  KEY_QUIT         = 'q',
+  // -- END: quit-like -- //
 };
 
 #endif

@@ -17,15 +17,7 @@
 #  define HEADERSIZE (STACKINGSIZE + 3 + FINISHINGSIZE + 1)
 #  define BODYSIZE (1 + PLAYINGSIZE + 1) + (CURSORSIZE)
 
-#  define SUIT(x) ((x)+2)
 #  define STYLE(x,y) "\x1b[" x "m" y "\x1b[0m"
-
-#  define ERRMSGLEN 29
-//#  undef ERRMSGLEN
-
-#  ifndef ERRMSGLEN
-#    error ERRMSGLEN is not defined yet. Did you run ./configure?
-#  endif
 
 typedef char schar[4];
 typedef char wchar[4];

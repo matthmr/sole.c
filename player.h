@@ -9,6 +9,8 @@ enum err {
   EBOTNCARD,
   EALLNFIN,
   ESTKNCARD,
+  ENMARK,
+  ENFIELD,
 };
 
 /*
@@ -54,6 +56,7 @@ typedef enum {
   TAKE = BIT(1),
   MARK = BIT(2),
   PLAY = BIT(3),
+  KEEP = BIT(4),
 } EventCmd;
 
 typedef struct {
@@ -77,6 +80,7 @@ typedef struct {
 typedef enum {
   COK = 0,
   CEXIT,
+  CWIN,
 } CmdStat;
 
 // TODO: make a callback field that can be read by `displayupdate'

@@ -14,19 +14,18 @@
 #  define CARDS_ON_PLAYING AR_SUM_UP_TO(FIELDS-1)
 #  define CARDS_ON_STACKING (DECKN - CARDS_ON_PLAYING)
 
-#  define REDSUIT(x) ((x) > 0)
-#  define BLACKSUIT(x) ((x) < 0)
+#  define REDSUIT(x) ((x) % 2)
+#  define BLACKSUIT(x) (!((x) % 2))
 
 /*
-  red suits:   positive
-  black suits: negative
+  black suits: mod 0
+  red suits:   mod 1
  */
 typedef enum suit {
-	DIAMONDS = 1,
-	HEARTS = 2,
-
-	CLUBS = -1,
-	SPADES = -2,
+	SPADES = 0,
+	HEARTS,
+	CLUBS,
+	DIAMONDS,
 } Suit;
 
 typedef enum number {
@@ -58,7 +57,8 @@ bool islegal(Card* act, Card* pas, Field actfield);
 
 int play(Player* p);
 int playbottom(Player* p);
-int playstack(Player* p);
+int playstackcur(Player* p);
+int playstackfin(Player* p);
 int playall(Player* p);
 int markstack(Player* p);
 int prevfield(Player* p);

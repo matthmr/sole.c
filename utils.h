@@ -9,10 +9,11 @@
 #  define SUMUPTO(x) (((x)*(x+1))/2)
 #  define MSG(x) (x), (sizeof (x))
 
-#  define ITOA(x) ((x) + 0x30)
-#  define ATOI(x) ((x) - 0x30)
-#  define IND(x)  ((x) - 1)
-#  define HUM(x)  ((x) + 1)
+#  define ITOA(x)   ((x) + 0x30)
+#  define ATOI(x)   ((x) - 0x30)
+#  define IND(x)    ((x) - 1)
+#  define HUM(x)    ((x) + 1)
+#  define ARRLEN(x) ((sizeof((x)))/(sizeof(*(x))))
 
 #  ifndef NULL
 #    define NULL ((void*)0)
